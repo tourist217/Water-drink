@@ -1,1 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Механика: Осушение пруда</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 40px;
+      background: #1e1e24;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    canvas {
+      background: #689f38;
+      border: 3px solid #33691e;
+      border-radius: 8px;
+      display: block;
+    }
+    .controls {
+      margin-top: 20px;
+      display: flex;
+      gap: 15px;
+    }
+    button {
+      padding: 12px 20px;
+      font-size: 15px;
+      font-weight: bold;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      background: #ffb300;
+      color: #212121;
+      transition: 0.2s;
+    }
+    button:hover:not(:disabled) {
+      background: #ffa000;
+    }
+    button:disabled {
+      background: #555;
+      color: #888;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
 
+  <h1>Прототип: Человек пьет воду из пруда</h1>
+  <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+  <div class="controls">
+    <button id="btnCup" onclick="buyCup()">Улучшить кружку (+150 мл) — цена 30 мл</button>
+    <button id="btnSpeed" onclick="buySpeed()">Увеличить скорость бега — цена 50 мл</button>
+    <button id="btnSpawn" onclick="buyWorker()">Нанять еще 1 человека — цена 100 мл</button>
+  </div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// --- ИГРОВОЙ БАЛАНС ---
+let money = 0;              // Заработанная валюта (мл)
+const maxPondWater = 6000;  // Всего воды в пруду
+let pondWater = maxPondWater;
+
+let cupLevel = 250;         // Вместимость тары
+let moveSpeed = 2.0;        // Скорость перемещения
+
+const tentPos = { x: 90, y: 260 };
+const waterEdgeX = 520;
+
+// Массив рабочих (начинаем с одного)
+const workers = [
+  createWorker()
+];
+
+function createWorker() {
+  return {
+    x: tentPos.x,
+    y: tentPos.y,
+    state: 'TO_WATER', // TO_WATER, DRINKING, TO_TENT, RESTING
+    drunkAmount: 0,
+    belly: 0,
+    timer: 0
+  };
+}
+
+// Покупки
+function buyCup() {
+  if (money >= 30) {
+    money -= 30;
+    cupLevel += 150;
+  }
+}
+
+function buySpeed() {
+  if (money >= 50) {
+    money -= 50;
+    moveSpeed += 0.8;
+  }
+}
+
+function buyWorker() {
+  if (money >= 100) {
+    money -= 100;
+    workers.push(createWorker());
+  }
+}
+
+// --- ОБНОВЛЕНИЕ ЛОГИКИ ---
+function update() {
+  workers.forEach(w => {
+    switch (w.state) {
+      case 'TO_WATER':
+        if (pondWater <= 0) break;
+        w.x += moveSpeed;
+        if (w.x >= waterEdgeX) {
+          w.x = waterEdgeX;
+          w.state = 'DRINKING';
+        }
+        break;
+
+      case 'DRINKING':
+        if (pondWater <= 0 || w.drunkAmount >= cupLevel) {
+          w.state = 'TO_TENT';
+          break;
+        }
+        // Питье воды (4 мл за тик)
+        const sip = Math.min(4, pondWater, cupLevel - w.drunkAmount);
+        pondWater -= sip;
+        w.drunkAmount += sip;
+        w.belly = (w.drunkAmount / cupLevel) * 12; // рост живота
+        break;
+
+      case 'TO_TENT':
+        w.x -= moveSpeed;
+        if (w.x <= tentPos.x) {
+          w.x = tentPos.x;
+          w.state = 'RESTING';
+          w.timer = 40; // задержка на разгрузку
+        }
+        break;
+
+      case 'RESTING':
+        w.timer--;
+        if (w.timer <= 0) {
+          money += w.drunkAmount;
+          w.drunkAmount = 0;
+          w.belly = 0;
+          w.state = pondWater > 0 ? 'TO_WATER' : 'RESTING';
+        }
+        break;
+    }
+  });
+
+  // Доступность кнопок
+  document.getElementById('btnCup').disabled = money < 30;
+  document.getElementById('btnSpeed').disabled = money < 50;
+  document.getElementById('btnSpawn').disabled = money < 100;
+}
+
+// --- ОТРИСОВКА ---
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 1. Палатка
+  ctx.fillStyle = '#d35400';
+  ctx.beginPath();
+  ctx.moveTo(30, 290);
+  ctx.lineTo(90, 180);
+  ctx.lineTo(150, 290);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#2c3e50';
+  ctx.beginPath();
+  ctx.moveTo(75, 290);
+  ctx.lineTo(90, 230);
+  ctx.lineTo(105, 290);
+  ctx.closePath();
+  ctx.fill();
+
+  // 2. Чаша пруда (дно)
+  ctx.fillStyle = '#4e3629';
+  ctx.beginPath();
+  ctx.ellipse(620, 260, 130, 80, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 3. Вода (уменьшается в реальном времени)
+  const ratio = Math.max(0, pondWater / maxPondWater);
+  if (ratio > 0) {
+    ctx.fillStyle = '#29b6f6';
+    ctx.beginPath();
+    // Эллипс сжимается и опускается ко дну
+    ctx.ellipse(620, 260 + (1 - ratio) * 20, 120 * ratio, 70 * ratio, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText('Пруд осушен до дна!', 530, 265);
+  }
+
+  // 4. Человечки
+  workers.forEach(w => {
+    // Тело
+    ctx.fillStyle = '#34495e';
+    ctx.fillRect(w.x - 10, w.y - 30, 20, 30);
+
+    // Голова
+    ctx.fillStyle = '#f1c40f';
+    ctx.beginPath();
+    ctx.arc(w.x, w.y - 40, 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Кружка
+    ctx.fillStyle = '#ecf0f1';
+    const cupOffsetX = w.state === 'TO_TENT' ? -15 : 10;
+    ctx.fillRect(w.x + cupOffsetX, w.y - 25, 8, 10);
+
+    // Раздувающийся живот при питье
+    if (w.belly > 0) {
+      ctx.fillStyle = '#e67e22';
+      ctx.beginPath();
+      ctx.arc(w.x, w.y - 15, w.belly, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+
+  // 5. Табло информации (HUD)
+  ctx.fillStyle = '#fff';
+  ctx.font = '16px Arial';
+  ctx.fillText(`Осталось воды в пруду: ${Math.round(pondWater)} / ${maxPondWater} мл`, 20, 35);
+  ctx.fillText(`Счет (мл для апгрейдов): ${Math.round(money)}`, 20, 60);
+  ctx.fillText(`Объем кружки: ${cupLevel} мл`, 20, 85);
+  ctx.fillText(`Людей на объекте: ${workers.length}`, 20, 110);
+}
+
+// Главный цикл
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+
+</body>
+</html>
