@@ -2,24 +2,24 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Осушение пруда: 8 палаток и водонапорная башня</title>
+  <title>Осушение водоёмов: 3 уровня и 10 ступеней прокачки</title>
   <style>
     body {
       margin: 0;
-      padding: 20px;
-      background: #17171d;
+      padding: 15px;
+      background: #141419;
       color: #fff;
       font-family: Arial, sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
+      user-select: none;
     }
     canvas {
-      background: #507d30;
-      border: 3px solid #274514;
+      border: 3px solid #233816;
       border-radius: 12px;
       display: block;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.7);
     }
     .controls {
       margin-top: 15px;
@@ -27,10 +27,10 @@
       gap: 10px;
       flex-wrap: wrap;
       justify-content: center;
-      max-width: 950px;
+      max-width: 980px;
     }
     button {
-      padding: 10px 16px;
+      padding: 10px 14px;
       font-size: 13px;
       font-weight: bold;
       border-radius: 6px;
@@ -38,76 +38,172 @@
       cursor: pointer;
       background: #ffb300;
       color: #212121;
-      transition: all 0.2s;
+      transition: all 0.15s ease;
     }
     button:hover:not(:disabled) {
       background: #ffa000;
-      transform: translateY(-1px);
+      transform: translateY(-2px);
     }
     button:disabled {
-      background: #383840;
-      color: #72727a;
+      background: #33333d;
+      color: #696973;
       cursor: not-allowed;
       transform: none;
+    }
+    /* Модальное окно перехода на новый уровень */
+    .modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.75);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+    .modal-box {
+      background: #1f1f2e;
+      border: 2px solid #ffb300;
+      padding: 30px 40px;
+      border-radius: 12px;
+      text-align: center;
+      max-width: 420px;
+      box-shadow: 0 15px 40px rgba(0,0,0,0.8);
+    }
+    .modal-box h2 {
+      margin-top: 0;
+      color: #ffb300;
+      font-size: 26px;
+    }
+    .modal-box p {
+      font-size: 16px;
+      line-height: 1.5;
+      color: #e0e0e0;
+    }
+    .btn-next {
+      margin-top: 15px;
+      padding: 14px 28px;
+      font-size: 16px;
+      background: #00e676;
+      color: #003314;
+    }
+    .btn-next:hover {
+      background: #00c853;
     }
   </style>
 </head>
 <body>
 
-  <h1>Осушение пруда (8 палаток + Водонапорная башня)</h1>
-  <canvas id="gameCanvas" width="960" height="580"></canvas>
+  <canvas id="gameCanvas" width="980" height="580"></canvas>
 
   <div class="controls">
     <button id="btnCup" onclick="buyCup()">Кружка</button>
     <button id="btnSpeed" onclick="buySpeed()">Скорость</button>
+    <button id="btnTentCapacity" onclick="buyTentCapacity()">Вместимость палаток</button>
     <button id="btnTent" onclick="buyTent()">Купить палатку</button>
-    <button id="btnWorker" onclick="buyWorker()">Поселить жильца</button>
+    <button id="btnWorker" onclick="buyWorker()">Доселить жильца</button>
     <button id="btnTower" onclick="upgradeTower()">Водонапорная башня</button>
+  </div>
+
+  <!-- Окно победы на уровне -->
+  <div id="winModal" class="modal" style="display: none;">
+    <div class="modal-box">
+      <h2 id="winTitle">Водоём осушен!</h2>
+      <p id="winDesc">Отличная работа! Все запасы воды выпиты до последней капли.</p>
+      <button class="btn-next" onclick="nextLevel()">Перейти на следующий водоём ➔</button>
+    </div>
   </div>
 
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// --- БАЛАНС И СОСТОЯНИЕ ---
-let money = 0;                  // Ресурсы (выпитые литры)
-const maxPondWater = 10000;     // Исходный объем пруда
-let pondWater = maxPondWater;
+// --- КОНФИГУРАЦИЯ 3 УРОВНЕЙ ---
+const LEVELS = [
+  {
+    name: 'Уровень 1: Сельский пруд',
+    maxWater: 400,
+    bgColor: '#4d7c2a',
+    borderColor: '#233816',
+    waterColor: '#29b6f6',
+    soilColor: '#4a3424'
+  },
+  {
+    name: 'Уровень 2: Лесное озеро',
+    maxWater: 3000,
+    bgColor: '#3f6d3b',
+    borderColor: '#1e381b',
+    waterColor: '#00bcd4',
+    soilColor: '#5c462b'
+  },
+  {
+    name: 'Уровень 3: Глубокий карьер',
+    maxWater: 13000,
+    bgColor: '#4a5b47',
+    borderColor: '#242e23',
+    waterColor: '#1e88e5',
+    soilColor: '#3d342f'
+  }
+];
 
-const pondCenter = { x: 480, y: 310 };
+let currentLevelIndex = 0;
+let pondWater = LEVELS[currentLevelIndex].maxWater;
+let money = 0; // Сохраненные ресурсы (литры)
+let isLevelCompleted = false;
+
+// Геометрия центрального пруда
+const pondCenter = { x: 490, y: 310 };
 const pondRadiusX = 145;
 const pondRadiusY = 85;
 
-// Кружка (до 1.0 л)
-let cupCapacity = 0.2;
-const maxCupCapacity = 1.0;
-const cupStep = 0.2;
-let cupPrice = 1;
+// --- 10 УРОВНЕЙ ПРОКАЧКИ ---
 
-// Скорость (3 уровня)
+// 1. Кружка (ур. 1..10) -> от 0.2 л до 2.0 л
+let cupLevel = 1;
+const maxCupLevel = 10;
+function getCupCapacity(lvl) {
+  return +(0.2 + (lvl - 1) * 0.2).toFixed(1);
+}
+function getCupPrice(lvl) {
+  return Math.round(1.5 * Math.pow(1.65, lvl - 1));
+}
+
+// 2. Скорость людей (ур. 1..10) -> от 1.5 до 4.2
 let speedLevel = 1;
-const maxSpeedLevel = 3;
-const speedValues = [1.5, 2.2, 3.0];
-let speedPrice = 2.5;
+const maxSpeedLevel = 10;
+function getSpeedValue(lvl) {
+  return +(1.5 + (lvl - 1) * 0.3).toFixed(1);
+}
+function getSpeedPrice(lvl) {
+  return Math.round(3 * Math.pow(1.7, lvl - 1));
+}
 
-// Водонапорная башня (3 уровня)
-let towerLevel = 0; // 0 - не построена, 1, 2, 3
-const towerPrices = [40, 120, 300];
-const towerPumpSpeeds = [0, 2.0, 6.0, 15.0]; // Литров в секунду (при 60 FPS делим на 60)
-const towerPos = { x: 480, y: 195 };
+// 3. Вместимость палатки (ур. 1..10) -> от 1 до 10 человек в палатке
+let tentCapacityLevel = 3; // Стартуем с лимита 3 человека
+const maxTentCapacityLevel = 10;
+function getTentCapacityPrice(lvl) {
+  return Math.round(8 * Math.pow(1.8, lvl - 3));
+}
 
-// Палатки (8 штук вокруг пруда)
+// 4. Водонапорная башня (ур. 0..10)
+let towerLevel = 0;
+const maxTowerLevel = 10;
+// Скорость выкачки в литрах/сек на каждом уровне
+const towerPumpSpeeds = [0, 1.5, 3.5, 6.5, 10, 15, 21, 28, 36, 45, 55];
+function getTowerPrice(lvl) {
+  return Math.round(15 * Math.pow(1.85, lvl));
+}
+const towerPos = { x: 490, y: 195 };
+
+// 5. Палатки (8 штук вокруг пруда)
 const tentColors = [
   '#d35400', '#2980b9', '#8e44ad', '#16a085',
   '#c0392b', '#27ae60', '#f39c12', '#34495e'
 ];
-const tentPrices = [0, 10, 20, 35, 55, 80, 110, 150];
+const tentPrices = [0, 6, 14, 25, 45, 70, 105, 150];
 const tentSlots = [];
-const MAX_PER_TENT = 3;
-
-// Генерируем 8 точек по эллиптической орбите вокруг пруда
-const tentDistanceX = 330;
+const tentDistanceX = 335;
 const tentDistanceY = 200;
+
 for (let i = 0; i < 8; i++) {
   const angle = (i / 8) * (Math.PI * 2) - Math.PI / 2;
   tentSlots.push({
@@ -115,23 +211,23 @@ for (let i = 0; i < 8; i++) {
     x: pondCenter.x + Math.cos(angle) * tentDistanceX,
     y: pondCenter.y + Math.sin(angle) * tentDistanceY,
     color: tentColors[i],
-    bought: i === 0, // первая палатка бесплатная
+    bought: i === 0, // первая бесплатная
     workers: 0
   });
 }
 
-let workerPrice = 4;
-const workers = [];
+let workerPrice = 3;
+let workers = [];
 
 function getActiveTentsCount() {
   return tentSlots.filter(t => t.bought).length;
 }
 
 function getTotalCapacity() {
-  return getActiveTentsCount() * MAX_PER_TENT;
+  return getActiveTentsCount() * tentCapacityLevel;
 }
 
-// Создание человека
+// Создание рабочего
 function spawnWorkerForTent(tent) {
   tent.workers++;
   const dx = pondCenter.x - tent.x;
@@ -157,25 +253,40 @@ function spawnWorkerForTent(tent) {
   });
 }
 
-// Стартовый житель в бесплатной палатке
+// Стартовый житель
 spawnWorkerForTent(tentSlots[0]);
 
 // --- АПГРЕЙДЫ ---
 function buyCup() {
-  if (cupCapacity < maxCupCapacity && money >= cupPrice) {
-    money -= cupPrice;
-    cupCapacity = Math.min(maxCupCapacity, +(cupCapacity + cupStep).toFixed(1));
-    cupPrice = +(cupPrice * 1.8).toFixed(1);
-    updateButtonsUI();
+  if (cupLevel < maxCupLevel) {
+    const cost = getCupPrice(cupLevel);
+    if (money >= cost) {
+      money -= cost;
+      cupLevel++;
+      updateButtonsUI();
+    }
   }
 }
 
 function buySpeed() {
-  if (speedLevel < maxSpeedLevel && money >= speedPrice) {
-    money -= speedPrice;
-    speedLevel++;
-    speedPrice = +(speedPrice * 2.1).toFixed(1);
-    updateButtonsUI();
+  if (speedLevel < maxSpeedLevel) {
+    const cost = getSpeedPrice(speedLevel);
+    if (money >= cost) {
+      money -= cost;
+      speedLevel++;
+      updateButtonsUI();
+    }
+  }
+}
+
+function buyTentCapacity() {
+  if (tentCapacityLevel < maxTentCapacityLevel) {
+    const cost = getTentCapacityPrice(tentCapacityLevel);
+    if (money >= cost) {
+      money -= cost;
+      tentCapacityLevel++;
+      updateButtonsUI();
+    }
   }
 }
 
@@ -186,7 +297,7 @@ function buyTent() {
     if (money >= cost) {
       money -= cost;
       nextTent.bought = true;
-      // При создании палатки сразу создаём 1 жителя бесплатно!
+      // При покупке дарим 1 жителя
       spawnWorkerForTent(nextTent);
       updateButtonsUI();
     }
@@ -194,18 +305,18 @@ function buyTent() {
 }
 
 function buyWorker() {
-  const availableTent = tentSlots.find(t => t.bought && t.workers < MAX_PER_TENT);
+  const availableTent = tentSlots.find(t => t.bought && t.workers < tentCapacityLevel);
   if (availableTent && money >= workerPrice) {
     money -= workerPrice;
     spawnWorkerForTent(availableTent);
-    workerPrice = Math.round(workerPrice * 1.6);
+    workerPrice = Math.round(workerPrice * 1.45);
     updateButtonsUI();
   }
 }
 
 function upgradeTower() {
-  if (towerLevel < 3) {
-    const cost = towerPrices[towerLevel];
+  if (towerLevel < maxTowerLevel) {
+    const cost = getTowerPrice(towerLevel);
     if (money >= cost) {
       money -= cost;
       towerLevel++;
@@ -214,29 +325,66 @@ function upgradeTower() {
   }
 }
 
-// Интерфейс кнопок
+// Переход на следующий уровень
+function nextLevel() {
+  document.getElementById('winModal').style.display = 'none';
+  if (currentLevelIndex < LEVELS.length - 1) {
+    currentLevelIndex++;
+  } else {
+    // Если прошли 3-й — начинаем цикл заново с усиленными цифрами
+    currentLevelIndex = 0;
+  }
+  pondWater = LEVELS[currentLevelIndex].maxWater;
+  isLevelCompleted = false;
+
+  // Ресет позиций людей
+  workers.forEach(w => {
+    w.x = w.homeX;
+    w.y = w.homeY;
+    w.state = 'TO_WATER';
+    w.drunkAmount = 0;
+    w.belly = 0;
+  });
+
+  updateButtonsUI();
+}
+
+// Обновление кнопок
 function updateButtonsUI() {
-  // Кружка
+  // 1. Кружка
   const btnCup = document.getElementById('btnCup');
-  if (cupCapacity >= maxCupCapacity) {
-    btnCup.innerText = `Кружка: 1.0 л [МАКС]`;
+  if (cupLevel >= maxCupLevel) {
+    btnCup.innerText = `Кружка: ${getCupCapacity(cupLevel)}л [МАКС 10/10]`;
     btnCup.disabled = true;
   } else {
-    btnCup.innerText = `Кружка: ${cupCapacity}л ➜ ${(cupCapacity + cupStep).toFixed(1)}л (${cupPrice} л)`;
-    btnCup.disabled = money < cupPrice;
+    const cost = getCupPrice(cupLevel);
+    btnCup.innerText = `Кружка: ур.${cupLevel}/10 (${getCupCapacity(cupLevel + 1)}л) — ${cost} л`;
+    btnCup.disabled = money < cost;
   }
 
-  // Скорость
+  // 2. Скорость
   const btnSpeed = document.getElementById('btnSpeed');
   if (speedLevel >= maxSpeedLevel) {
-    btnSpeed.innerText = `Скорость: ур.${speedLevel}/3 [МАКС]`;
+    btnSpeed.innerText = `Скорость: ур.10/10 [МАКС]`;
     btnSpeed.disabled = true;
   } else {
-    btnSpeed.innerText = `Скорость: ур.${speedLevel + 1} (${speedPrice} л)`;
-    btnSpeed.disabled = money < speedPrice;
+    const cost = getSpeedPrice(speedLevel);
+    btnSpeed.innerText = `Скорость: ур.${speedLevel + 1}/10 — ${cost} л`;
+    btnSpeed.disabled = money < cost;
   }
 
-  // Палатка (+1 житель сразу)
+  // 3. Вместимость палаток
+  const btnCap = document.getElementById('btnTentCapacity');
+  if (tentCapacityLevel >= maxTentCapacityLevel) {
+    btnCap.innerText = `Мест в палатке: 10 [МАКС]`;
+    btnCap.disabled = true;
+  } else {
+    const cost = getTentCapacityPrice(tentCapacityLevel);
+    btnCap.innerText = `Расширить палатки (${tentCapacityLevel + 1} мест) — ${cost} л`;
+    btnCap.disabled = money < cost;
+  }
+
+  // 4. Покупка палатки
   const btnTent = document.getElementById('btnTent');
   const nextTent = tentSlots.find(t => !t.bought);
   if (!nextTent) {
@@ -244,47 +392,55 @@ function updateButtonsUI() {
     btnTent.disabled = true;
   } else {
     const cost = tentPrices[nextTent.id];
-    btnTent.innerText = `Купить палатку #${nextTent.id + 1} + 1 житель (${cost} л)`;
+    btnTent.innerText = `Купить палатку #${nextTent.id + 1} (+1 чел) — ${cost} л`;
     btnTent.disabled = money < cost;
   }
 
-  // Жильцы
+  // 5. Найм жильца
   const btnWorker = document.getElementById('btnWorker');
-  const availableTent = tentSlots.find(t => t.bought && t.workers < MAX_PER_TENT);
+  const availableTent = tentSlots.find(t => t.bought && t.workers < tentCapacityLevel);
   if (!availableTent) {
-    btnWorker.innerText = getActiveTentsCount() < 8 ? `Купите палатку!` : `Все 8 палаток полны [24/24]`;
+    btnWorker.innerText = getActiveTentsCount() < 8 ? `Купите палатку!` : `Лагерь полон [${workers.length}/${getTotalCapacity()}]`;
     btnWorker.disabled = true;
   } else {
-    btnWorker.innerText = `Доселить жильца [${workers.length}/${getTotalCapacity()}] (${workerPrice} л)`;
+    btnWorker.innerText = `Доселить жильца [${workers.length}/${getTotalCapacity()}] — ${workerPrice} л`;
     btnWorker.disabled = money < workerPrice;
   }
 
-  // Водонапорная башня
+  // 6. Башня
   const btnTower = document.getElementById('btnTower');
-  if (towerLevel === 0) {
-    btnTower.innerText = `Построить башню (ур.1: 2 л/с) — ${towerPrices[0]} л`;
-    btnTower.disabled = money < towerPrices[0];
-  } else if (towerLevel < 3) {
-    btnTower.innerText = `Башня ур.${towerLevel + 1} (${towerPumpSpeeds[towerLevel + 1]} л/с) — ${towerPrices[towerLevel]} л`;
-    btnTower.disabled = money < towerPrices[towerLevel];
-  } else {
-    btnTower.innerText = `Башня: ур.3 (15 л/с) [МАКС]`;
+  if (towerLevel >= maxTowerLevel) {
+    btnTower.innerText = `Башня: ур.10 (${towerPumpSpeeds[10]} л/с) [МАКС]`;
     btnTower.disabled = true;
+  } else {
+    const cost = getTowerPrice(towerLevel);
+    btnTower.innerText = towerLevel === 0
+      ? `Построить башню (ур.1: ${towerPumpSpeeds[1]} л/с) — ${cost} л`
+      : `Башня: ур.${towerLevel + 1}/10 (${towerPumpSpeeds[towerLevel + 1]} л/с) — ${cost} л`;
+    btnTower.disabled = money < cost;
   }
 }
 
-// --- ЛОГИКА (UPDATE) ---
+// --- ИГРОВОЙ ЦИКЛ (UPDATE) ---
 function update() {
-  const currentSpeed = speedValues[speedLevel - 1];
+  const currentSpeed = getSpeedValue(speedLevel);
+  const currentCapacity = getCupCapacity(cupLevel);
 
-  // 1. Работа башни (откачка воды напрямую в ресурсы)
+  // Проверка осушения водоёма
+  if (pondWater <= 0 && !isLevelCompleted) {
+    pondWater = 0;
+    isLevelCompleted = true;
+    showWinModal();
+  }
+
+  // Откачка башней
   if (towerLevel > 0 && pondWater > 0) {
     const pumped = Math.min(pondWater, towerPumpSpeeds[towerLevel] / 60);
     pondWater -= pumped;
     money += pumped;
   }
 
-  // 2. Логика человечков
+  // Работа людей
   workers.forEach(w => {
     switch (w.state) {
       case 'TO_WATER':
@@ -304,14 +460,15 @@ function update() {
         break;
 
       case 'DRINKING':
-        if (pondWater <= 0 || w.drunkAmount >= cupCapacity) {
+        if (pondWater <= 0 || w.drunkAmount >= currentCapacity) {
           w.state = 'TO_TENT';
           break;
         }
-        const sip = Math.min(0.008, pondWater, cupCapacity - w.drunkAmount);
+        // Скорость питья: 0.012 л за тик
+        const sip = Math.min(0.012, pondWater, currentCapacity - w.drunkAmount);
         pondWater -= sip;
         w.drunkAmount += sip;
-        w.belly = (w.drunkAmount / cupCapacity) * 9;
+        w.belly = (w.drunkAmount / currentCapacity) * 9;
         break;
 
       case 'TO_TENT':
@@ -323,7 +480,7 @@ function update() {
           w.x = w.homeX;
           w.y = w.homeY;
           w.state = 'RESTING';
-          w.timer = 20;
+          w.timer = 18;
         } else {
           w.x += (backDx / backDist) * currentSpeed;
           w.y += (backDy / backDist) * currentSpeed;
@@ -345,26 +502,48 @@ function update() {
   updateButtonsUI();
 }
 
+function showWinModal() {
+  const modal = document.getElementById('winModal');
+  const title = document.getElementById('winTitle');
+  const desc = document.getElementById('winDesc');
+
+  if (currentLevelIndex === 0) {
+    title.innerText = 'Пруд (400 л) осушен!';
+    desc.innerText = 'Отличная разминка! Впереди Лесное озеро на 3 000 литров. Все твои палатки, люди и прокачка сохраняются!';
+  } else if (currentLevelIndex === 1) {
+    title.innerText = 'Лесное озеро (3 000 л) выпито!';
+    desc.innerText = 'Невероятно! Лагерь набирает мощь. На очереди огромный Глубокий карьер на 13 000 литров!';
+  } else {
+    title.innerText = 'Карьер (13 000 л) осушен полностью!';
+    desc.innerText = 'Грандиозная победа! Ты выпил все доступные водоёмы планеты!';
+  }
+  modal.style.display = 'flex';
+}
+
 // --- ОТРИСОВКА (DRAW) ---
 let pulseTick = 0;
 function draw() {
   pulseTick++;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const lvlConfig = LEVELS[currentLevelIndex];
 
-  // 1. Дно пруда
-  ctx.fillStyle = '#4a3424';
+  // Фон поляны
+  ctx.fillStyle = lvlConfig.bgColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 1. Дно пруда (грунт)
+  ctx.fillStyle = lvlConfig.soilColor;
   ctx.beginPath();
   ctx.ellipse(pondCenter.x, pondCenter.y, pondRadiusX, pondRadiusY, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // 2. Вода в пруду
-  const ratio = Math.max(0, pondWater / maxPondWater);
+  // 2. Вода в водоёме
+  const ratio = Math.max(0, pondWater / lvlConfig.maxWater);
   if (ratio > 0) {
-    ctx.fillStyle = '#29b6f6';
+    ctx.fillStyle = lvlConfig.waterColor;
     ctx.beginPath();
     ctx.ellipse(
       pondCenter.x, 
-      pondCenter.y + (1 - ratio) * 15, 
+      pondCenter.y + (1 - ratio) * 16, 
       (pondRadiusX - 10) * ratio, 
       (pondRadiusY - 10) * ratio, 
       0, 0, Math.PI * 2
@@ -374,65 +553,64 @@ function draw() {
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 20px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('10 000 литров выпиты!', pondCenter.x, pondCenter.y + 6);
+    ctx.fillText('ВОДОЁМ ВЫПИТ ДО ДНА!', pondCenter.x, pondCenter.y + 6);
     ctx.textAlign = 'start';
   }
 
   // 3. Водонапорная башня
   if (towerLevel > 0) {
-    // Труба в воду
+    // Труба
     ctx.strokeStyle = '#7f8c8d';
-    ctx.lineWidth = 6 + towerLevel * 2;
+    ctx.lineWidth = 5 + Math.min(10, towerLevel);
     ctx.beginPath();
     ctx.moveTo(towerPos.x, towerPos.y + 15);
-    ctx.lineTo(pondCenter.x, pondCenter.y - 20);
+    ctx.lineTo(pondCenter.x, pondCenter.y - 18);
     ctx.stroke();
 
-    // Опоры башни
-    ctx.strokeStyle = '#bdc3c7';
+    // Опоры
+    ctx.strokeStyle = '#cfd8dc';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(towerPos.x - 20, towerPos.y + 30);
+    ctx.moveTo(towerPos.x - 22, towerPos.y + 30);
     ctx.lineTo(towerPos.x, towerPos.y - 10);
-    ctx.lineTo(towerPos.x + 20, towerPos.y + 30);
+    ctx.lineTo(towerPos.x + 22, towerPos.y + 30);
     ctx.stroke();
 
-    // Бак башни
-    const tankColors = ['#95a5a6', '#3498db', '#e74c3c'];
-    ctx.fillStyle = tankColors[towerLevel - 1];
+    // Бак башни (цвет меняется по мере прокачки)
+    const towerHues = ['#78909c', '#5c6bc0', '#26a69a', '#ffa726', '#ef5350', '#ab47bc', '#ec407a', '#ffd700', '#00e5ff', '#76ff03'];
+    ctx.fillStyle = towerHues[towerLevel - 1];
     ctx.beginPath();
-    ctx.roundRect(towerPos.x - 24, towerPos.y - 45, 48, 38, 8);
+    ctx.roundRect(towerPos.x - 25, towerPos.y - 48, 50, 40, 8);
     ctx.fill();
-    ctx.strokeStyle = '#2c3e50';
+    ctx.strokeStyle = '#263238';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Пульсация выкачки воды
+    // Анимация выкачивания воды
     if (pondWater > 0) {
       ctx.fillStyle = '#00e5ff';
-      const pulse = (Math.sin(pulseTick * 0.1) + 1) * 3;
+      const pulse = (Math.sin(pulseTick * 0.15) + 1) * 3.5;
       ctx.beginPath();
-      ctx.arc(pondCenter.x, pondCenter.y - 20, 5 + pulse, 0, Math.PI * 2);
+      ctx.arc(pondCenter.x, pondCenter.y - 18, 5 + pulse, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Подпись башни
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 11px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(`Башня Ур.${towerLevel} (${towerPumpSpeeds[towerLevel]} л/с)`, towerPos.x, towerPos.y - 52);
+    ctx.fillText(`Башня Ур.${towerLevel} (${towerPumpSpeeds[towerLevel]} л/с)`, towerPos.x, towerPos.y - 55);
     ctx.textAlign = 'start';
   } else {
-    // Место под башню (пунктир)
+    // Пустой слот под башню
     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 4]);
-    ctx.strokeRect(towerPos.x - 25, towerPos.y - 40, 50, 60);
+    ctx.strokeRect(towerPos.x - 25, towerPos.y - 45, 50, 60);
     ctx.setLineDash([]);
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.font = '11px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('Место под башню', towerPos.x, towerPos.y - 10);
+    ctx.fillText('Слот башни', towerPos.x, towerPos.y - 12);
     ctx.textAlign = 'start';
   }
 
@@ -456,14 +634,13 @@ function draw() {
       ctx.closePath();
       ctx.fill();
 
-      // Счетчик жильцов
+      // Лимит жильцов
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 11px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText(`${slot.workers}/${MAX_PER_TENT}`, slot.x, slot.y + 32);
+      ctx.fillText(`${slot.workers}/${tentCapacityLevel}`, slot.x, slot.y + 32);
       ctx.textAlign = 'start';
     } else {
-      // Пустой слот
       ctx.strokeStyle = 'rgba(255,255,255,0.35)';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([5, 5]);
@@ -479,7 +656,7 @@ function draw() {
     }
   });
 
-  // 5. Человечки (сортировка по Y)
+  // 5. Отрисовка человечков (с сортировкой по Y для глубины)
   const sortedWorkers = [...workers].sort((a, b) => a.y - b.y);
 
   sortedWorkers.forEach(w => {
@@ -495,30 +672,32 @@ function draw() {
     ctx.arc(w.x, w.y - 25, 6, 0, Math.PI * 2);
     ctx.fill();
 
-    // Кружка
+    // Кружка (растет с уровнем кружки)
     ctx.fillStyle = '#ffffff';
-    const cupHeight = 5 + (cupCapacity * 5);
-    ctx.fillRect(w.x + 5, w.y - 15, 4, cupHeight);
+    const cupHeight = 5 + cupLevel * 1.2;
+    ctx.fillRect(w.x + 5, w.y - 16, 4 + (cupLevel > 5 ? 2 : 0), cupHeight);
 
-    // Живот
+    // Надувающийся живот
     if (w.belly > 0) {
       ctx.fillStyle = '#e67e22';
       ctx.beginPath();
-      ctx.arc(w.x, w.y - 9, w.belly * 0.8, 0, Math.PI * 2);
+      ctx.arc(w.x, w.y - 9, w.belly * 0.85, 0, Math.PI * 2);
       ctx.fill();
     }
   });
 
   // 6. HUD (Интерфейс сверху)
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 15px Arial';
-  ctx.fillText(`Вода в пруду: ${Math.round(pondWater)} / ${maxPondWater} л`, 20, 25);
-  ctx.fillText(`Ресурсы: ${money.toFixed(1)} л`, 20, 48);
-  ctx.fillText(`Кружка: ${cupCapacity.toFixed(1)} л | Скорость: ${speedLevel}/3`, 20, 71);
-  ctx.fillText(`Лагерь: ${workers.length} чел (палаток: ${getActiveTentsCount()}/8)`, 20, 94);
+  ctx.font = 'bold 16px Arial';
+  ctx.fillText(lvlConfig.name, 20, 28);
+  ctx.font = '14px Arial';
+  ctx.fillText(`Вода: ${Math.round(pondWater)} / ${lvlConfig.maxWater} л`, 20, 52);
+  ctx.fillText(`Ресурсы ($): ${money.toFixed(1)} л`, 20, 74);
+  ctx.fillText(`Кружка: ур.${cupLevel}/10 (${getCupCapacity(cupLevel)}л) | Скорость: ур.${speedLevel}/10`, 20, 96);
+  ctx.fillText(`Жителей: ${workers.length} / ${getTotalCapacity()} чел | Палаток: ${getActiveTentsCount()}/8`, 20, 118);
   if (towerLevel > 0) {
     ctx.fillStyle = '#00e5ff';
-    ctx.fillText(`Башня откачивает: +${towerPumpSpeeds[towerLevel]} л/сек`, 20, 117);
+    ctx.fillText(`Башня Ур.${towerLevel}: откачивает +${towerPumpSpeeds[towerLevel]} л/сек`, 20, 140);
   }
 }
 
